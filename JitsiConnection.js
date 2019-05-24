@@ -92,6 +92,14 @@ JitsiConnection.prototype.setToken = function(token) {
 };
 
 /**
+ * This method allows to generate token at server side.
+ * @param token array with token data.
+ */
+JitsiConnection.prototype.generateToken = function(data) {
+    return this.xmpp.connection.tokengen.generate(data);
+};
+
+/**
  * Creates and joins new conference.
  * @param name the name of the conference; if null - a generated name will be
  * provided from the api

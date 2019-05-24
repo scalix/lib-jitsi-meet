@@ -13,6 +13,7 @@ import initJingle from './strophe.jingle';
 import initStropheUtil from './strophe.util';
 import initPing from './strophe.ping';
 import initRayo from './strophe.rayo';
+import initTokenGen from './strophe.token.gen';
 import initStropheLogger from './strophe.logger';
 import Listenable from '../util/Listenable';
 import Caps from './Caps';
@@ -566,6 +567,7 @@ export default class XMPP extends Listenable {
         initStropheUtil();
         initPing(this);
         initRayo();
+        initTokenGen();
         initStropheLogger();
     }
 
