@@ -284,7 +284,7 @@ class JingleConnectionPlugin extends ConnectionPlugin {
     /**
      *
      */
-    getStunAndTurnCredentials() {
+    getStunAndTurnCredentials(exdiscoNS) {
         // get stun and turn configuration from server via xep-0215
         // uses time-limited credentials as described in
         // http://tools.ietf.org/html/draft-uberti-behave-turn-rest-00
@@ -300,7 +300,7 @@ class JingleConnectionPlugin extends ConnectionPlugin {
         this.connection.sendIQ(
             $iq({ type: 'get',
                 to: this.connection.domain })
-                .c('services', { xmlns: 'urn:xmpp:extdisco:1' }),
+                .c('services', { xmlns: exdiscoNS }),
             res => {
                 const iceservers = [];
 
@@ -310,52 +310,43 @@ class JingleConnectionPlugin extends ConnectionPlugin {
                     const dict = {};
                     const type = el.attr('type');
 
-                    switch (type) {
-                    case 'stun':
-                        dict.url = `stun:${el.attr('host')}`;
-                        if (el.attr('port')) {
-                            dict.url += `:${el.attr('port')}`;
+                    dict.url = `${type}:`;
+
+                    const username = el.attr('username');
+
+                    if (username) {
+                        const match
+                            = navigator.userAgent.match(
+                            /Chrom(e|ium)\/([0-9]+)\./);
+
+                        if (match && parseInt(match[2], 10) < 28
+                            && (type === 'turn' || type === 'turns')) {
+                            dict.url += `${username}@`;
+                        } else {
+                            // only works in M28
+                            dict.username = username;
                         }
-                        iceservers.push(dict);
-                        break;
-                    case 'turn':
-                    case 'turns': {
-                        dict.url = `${type}:`;
-                        const username = el.attr('username');
-
-                        // https://code.google.com/p/webrtc/issues/detail
-                        // ?id=1508
-
-                        if (username) {
-                            const match
-                                = navigator.userAgent.match(
-                                    /Chrom(e|ium)\/([0-9]+)\./);
-
-                            if (match && parseInt(match[2], 10) < 28) {
-                                dict.url += `${username}@`;
-                            } else {
-                                // only works in M28
-                                dict.username = username;
-                            }
-                        }
-                        dict.url += el.attr('host');
-                        const port = el.attr('port');
-
-                        if (port) {
-                            dict.url += `:${el.attr('port')}`;
-                        }
-                        const transport = el.attr('transport');
-
-                        if (transport && transport !== 'udp') {
-                            dict.url += `?transport=${transport}`;
-                        }
-
-                        dict.credential = el.attr('password')
-                                || dict.credential;
-                        iceservers.push(dict);
-                        break;
                     }
+
+                    dict.url += `${el.attr('host')}`;
+
+                    const port = el.attr('port');
+
+                    if (port) {
+                        dict.url += `:${el.attr('port')}`;
                     }
+
+                    const transport = el.attr('transport');
+
+                    if (transport && transport !== 'udp') {
+                        dict.url += `?transport=${transport}`;
+                    }
+
+                    dict.urls = [ dict.url ];
+                    dict.credential = el.attr('password') || dict.credential;
+
+                    iceservers.push(dict);
+
                 });
 
                 const options = this.xmpp.options;
@@ -375,6 +366,8 @@ class JingleConnectionPlugin extends ConnectionPlugin {
                 logger.warn('getting turn credentials failed', err);
                 logger.warn('is mod_turncredentials or similar installed?');
             });
+
+        this.connection.flush();
 
         // implement push?
     }

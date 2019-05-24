@@ -22,6 +22,12 @@ import XMPPEvents from '../../service/xmpp/XMPPEvents';
 
 const logger = getLogger(__filename);
 
+const EXTDISCO_NS = [
+    'urn:xmpp:extdisco:1',
+    'urn:xmpp:extdisco:2',
+    'urn:xmpp:extdisco'
+];
+
 /**
  *
  * @param token
@@ -174,10 +180,8 @@ export default class XMPP extends Listenable {
             now);
         if (status === Strophe.Status.CONNECTED
             || status === Strophe.Status.ATTACHED) {
-            if (this.options.useStunTurn
-                || (this.options.p2p && this.options.p2p.useStunTurn)) {
-                this.connection.jingle.getStunAndTurnCredentials();
-            }
+
+            let extdiscoNS = null;
 
             logger.info(`My Jabber ID: ${this.connection.jid}`);
 
@@ -186,11 +190,28 @@ export default class XMPP extends Listenable {
 
             this.caps.getFeaturesAndIdentities(pingJid)
                 .then(({ features, identities }) => {
+
+                    EXTDISCO_NS.some(ns => {
+                        if (features.has(ns)) {
+                            extdiscoNS = ns;
+
+                            return true;
+                        }
+
+                        return false;
+                    });
+
                     if (features.has(Strophe.NS.PING)) {
                         this._pingSupported = true;
                         this.connection.ping.startInterval(pingJid);
                     } else {
                         logger.warn(`Ping NOT supported by ${pingJid}`);
+                    }
+
+                    if (extdiscoNS
+                        && (this.options.useStunTurn
+                        || (this.options.p2p && this.options.p2p.useStunTurn))) {
+                        this.connection.jingle.getStunAndTurnCredentials(extdiscoNS);
                     }
 
                     // check for speakerstats
