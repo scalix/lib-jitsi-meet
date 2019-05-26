@@ -1370,7 +1370,7 @@ JitsiConference.prototype._onMemberBotTypeChanged = function(jid, botType) {
 JitsiConference.prototype.onMemberLeft = function(jid) {
     const id = Strophe.getResourceFromJid(jid);
 
-    if (id === 'focus' || this.myUserId() === id) {
+    if (!id || id === 'focus' || this.myUserId() === id) {
         return;
     }
     const participant = this.participants[id];
