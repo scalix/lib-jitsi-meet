@@ -1309,7 +1309,7 @@ JitsiConference.prototype.onMemberJoined = function(
         jid, nick, role, isHidden, statsID, status, identity, botType) {
     const id = Strophe.getResourceFromJid(jid);
 
-    if (id === 'focus' || this.myUserId() === id) {
+    if (!id || id === 'focus' || this.myUserId() === id) {
         return;
     }
     const participant
