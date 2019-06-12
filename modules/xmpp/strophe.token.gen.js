@@ -63,7 +63,7 @@ class TokenGenConnectionPlugin extends ConnectionPlugin {
                         .find('>tokens>token')
                         .map((index, item) => {
                             return {
-                                email: $(item).attr('email'),
+                                email: $(item).attr('user'),
                                 token: $(item).attr('token')
                             };
                         });
