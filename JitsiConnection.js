@@ -110,6 +110,14 @@ JitsiConnection.prototype.generateToken = function(data) {
 };
 
 /**
+ * This method allows to send emails.
+ * @param token array with token data.
+ */
+JitsiConnection.prototype.sendEmail = function(data) {
+    return this.xmpp.connection.smtpemail.send(data);
+};
+
+/**
  * Creates and joins new conference.
  * @param name the name of the conference; if null - a generated name will be
  * provided from the api
