@@ -16,6 +16,7 @@ import initRayo from './strophe.rayo';
 import initTokenGen from './strophe.token.gen';
 import initSmtpEmail from './strophe.smtp.email';
 import initStropheLogger from './strophe.logger';
+import LastSuccessTracker from './StropheBoshLastSuccess';
 import Listenable from '../util/Listenable';
 import Caps from './Caps';
 import GlobalOnErrorHandler from '../util/GlobalOnErrorHandler';
@@ -89,6 +90,9 @@ export default class XMPP extends Listenable {
         this._initStrophePlugins(this);
 
         this.connection = createConnection(token, options.bosh);
+
+        this._lastSuccessTracker = new LastSuccessTracker();
+        this._lastSuccessTracker.startTracking(this.connection);
 
         this.caps = new Caps(this.connection, this.options.clientNode);
 
@@ -301,12 +305,16 @@ export default class XMPP extends Listenable {
                     this.eventEmitter.emit(
                         JitsiConnectionEvents.CONNECTION_FAILED,
                         JitsiConnectionErrors.SERVER_ERROR,
-                        errMsg || 'server-error');
+                        errMsg || 'server-error',
+                        /* credentials */ undefined,
+                        this._getConnectionFailedReasonDetails());
                 } else {
                     this.eventEmitter.emit(
                         JitsiConnectionEvents.CONNECTION_FAILED,
                         JitsiConnectionErrors.CONNECTION_DROPPED_ERROR,
-                        errMsg || 'connection-dropped-error');
+                        errMsg || 'connection-dropped-error',
+                        /* credentials */ undefined,
+                        this._getConnectionFailedReasonDetails());
                 }
             }
         } else if (status === Strophe.Status.AUTHFAIL) {
@@ -419,31 +427,23 @@ export default class XMPP extends Listenable {
     }
 
     /**
+     * Joins or creates a muc with the provided jid, created from the passed
+     * in room name and muc host and onCreateResource result.
      *
-     * @param roomName
-     * @param options
+     * @param {string} roomName - The name of the muc to join.
+     * @param {Object} options - Configuration for how to join the muc.
+     * @param {Function} [onCreateResource] - Callback to invoke when a resource
+     * is to be added to the jid.
+     * @returns {Promise} Resolves with an instance of a strophe muc.
      */
-    createRoom(roomName, options) {
-        // By default MUC nickname is the resource part of the JID
-        let mucNickname = Strophe.getNodeFromJid(this.connection.jid);
+    createRoom(roomName, options, onCreateResource) {
         let roomjid = `${roomName}@${this.options.hosts.muc}/`;
-        const cfgNickname
-            = options.useNicks && options.nick ? options.nick : null;
 
-        if (cfgNickname) {
-            // Use nick if it's defined
-            mucNickname = options.nick;
-        } else if (!this.authenticatedUser) {
-            // node of the anonymous JID is very long - here we trim it a bit
-            mucNickname = mucNickname.substr(0, 8);
-        }
+        const mucNickname = onCreateResource
+            ? onCreateResource(this.connection.jid, this.authenticatedUser)
+            : RandomUtil.randomHexString(8).toLowerCase();
 
-        // Constant JIDs need some random part to be appended in order to be
-        // able to join the MUC more than once.
-        if (this.authenticatedUser || cfgNickname !== null) {
-            mucNickname += `-${RandomUtil.randomHexString(6)}`;
-        }
-
+        logger.info(`JID ${this.connection.jid} using MUC nickname ${mucNickname}`);
         roomjid += mucNickname;
 
         return this.connection.emuc.createRoom(roomjid, null, options);
@@ -659,6 +659,7 @@ export default class XMPP extends Listenable {
         /* eslint-disable camelcase */
         // check for possible suspend
         details.suspend_time = this.connection.ping.getPingSuspendTime();
+        details.time_since_last_success = this._lastSuccessTracker.getTimeSinceLastSuccess();
         /* eslint-enable camelcase */
 
         return details;

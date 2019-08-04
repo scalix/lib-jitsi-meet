@@ -101,6 +101,16 @@ export default class BrowserCapabilities extends BrowserDetection {
     }
 
     /**
+     * Returns whether or not the current environment needs a user interaction
+     * with the page before any unmute can occur.
+     *
+     * @returns {boolean}
+     */
+    isUserInteractionRequiredForUnmute() {
+        return this.isFirefox() || this.isSafari();
+    }
+
+    /**
      * Checks if the current browser triggers 'onmute'/'onunmute' events when
      * user's connection is interrupted and the video stops playback.
      * @returns {*|boolean} 'true' if the event is supported or 'false'
@@ -140,17 +150,6 @@ export default class BrowserCapabilities extends BrowserDetection {
         return navigator.mediaDevices
             && typeof navigator.mediaDevices.ondevicechange !== 'undefined'
             && typeof navigator.mediaDevices.addEventListener !== 'undefined';
-    }
-
-    /**
-     * Checks if the current browser supports the MediaStream constructor as
-     * defined by https://www.w3.org/TR/mediacapture-streams/#constructors. In
-     * cases where there is no support, it maybe be necessary to get audio
-     * and video in two distinct GUM calls.
-     * @return {boolean}
-     */
-    supportsMediaStreamConstructor() {
-        return !this.isReactNative();
     }
 
     /**
@@ -256,7 +255,7 @@ export default class BrowserCapabilities extends BrowserDetection {
             return true;
         }
 
-        if (this.isSafariWithVP8()) {
+        if (this.isSafariWithVP8() && typeof window.RTCRtpTransceiver !== 'undefined') {
             // eslint-disable-next-line max-len
             // https://trac.webkit.org/changeset/236144/webkit/trunk/LayoutTests/webrtc/video-addLegacyTransceiver.html
             // eslint-disable-next-line no-undef

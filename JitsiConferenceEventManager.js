@@ -87,20 +87,26 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
 
 
     chatRoom.addListener(XMPPEvents.AUDIO_MUTED_BY_FOCUS,
-        () => {
+        actor => {
             // TODO: Add a way to differentiate between commands which caused
             // us to mute and those that did not change our state (i.e. we were
             // already muted).
             Statistics.sendAnalytics(createRemotelyMutedEvent());
 
+            conference.mutedByFocusActor = actor;
+
             // set isMutedByFocus when setAudioMute Promise ends
             conference.rtc.setAudioMute(true).then(
                 () => {
                     conference.isMutedByFocus = true;
-                },
-                () =>
-                    logger.warn(
-                        'Error while audio muting due to focus request'));
+                    conference.mutedByFocusActor = null;
+                })
+                .catch(
+                    error => {
+                        conference.mutedByFocusActor = null;
+                        logger.warn(
+                            'Error while audio muting due to focus request', error);
+                    });
         }
     );
 
@@ -135,6 +141,13 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
                 Statistics.sendAnalytics(event);
             });
         });
+
+    chatRoom.addListener(XMPPEvents.RENEGOTIATION_FAILED, (e, session) => {
+        if (!session.isP2P) {
+            conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
+                JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
+        }
+    });
 
     this.chatRoomForwarder.forward(XMPPEvents.ROOM_JOIN_ERROR,
         JitsiConferenceEvents.CONFERENCE_FAILED,
@@ -173,15 +186,6 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.GRACEFUL_SHUTDOWN,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.GRACEFUL_SHUTDOWN);
-
-    chatRoom.addListener(XMPPEvents.JINGLE_FATAL_ERROR,
-        (session, error) => {
-            if (!session.isP2P) {
-                conference.eventEmitter.emit(
-                    JitsiConferenceEvents.CONFERENCE_FAILED,
-                    JitsiConferenceErrors.JINGLE_FATAL_ERROR, error);
-            }
-        });
 
     chatRoom.addListener(XMPPEvents.CONNECTION_ICE_FAILED,
         jingleSession => {
@@ -232,17 +236,6 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.PHONE_NUMBER_CHANGED,
         JitsiConferenceEvents.PHONE_NUMBER_CHANGED);
 
-    chatRoom.addListener(
-        XMPPEvents.CONFERENCE_SETUP_FAILED,
-        (jingleSession, error) => {
-            if (!jingleSession.isP2P) {
-                conference.eventEmitter.emit(
-                    JitsiConferenceEvents.CONFERENCE_FAILED,
-                    JitsiConferenceErrors.SETUP_FAILED,
-                    error);
-            }
-        });
-
     chatRoom.setParticipantPropertyListener((node, from) => {
         const participant = conference.getParticipantById(from);
 
@@ -255,12 +248,8 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
             node.value);
     });
 
-    this.chatRoomForwarder.forward(XMPPEvents.KICKED,
-        JitsiConferenceEvents.KICKED);
     chatRoom.addListener(XMPPEvents.KICKED,
-        () => {
-            conference.leave();
-        });
+        conference.onMemberKicked.bind(conference));
     chatRoom.addListener(XMPPEvents.SUSPEND_DETECTED,
         conference.onSuspendDetected.bind(conference));
 
@@ -318,7 +307,7 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
 
             conference.eventEmitter.emit(
                 JitsiConferenceEvents.MESSAGE_RECEIVED,
-                id, txt, ts);
+                id, txt, ts, displayName);
         });
 
     chatRoom.addListener(
@@ -440,11 +429,12 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
                 conference.lastDominantSpeaker = id;
                 conference.eventEmitter.emit(
                     JitsiConferenceEvents.DOMINANT_SPEAKER_CHANGED, id);
-            }
-            if (conference.statistics && conference.myUserId() === id) {
-                // We are the new dominant speaker.
-                conference.statistics.sendDominantSpeakerEvent(
-                    conference.room.roomjid);
+
+                if (conference.statistics && conference.myUserId() === id) {
+                    // We are the new dominant speaker.
+                    conference.statistics.sendDominantSpeakerEvent(
+                        conference.room.roomjid);
+                }
             }
         });
 
@@ -501,21 +491,37 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
     rtc.addListener(RTCEvents.CREATE_ANSWER_FAILED,
         (e, tpc) => {
             conference.statistics.sendCreateAnswerFailed(e, tpc);
+            if (!tpc.isP2P) {
+                conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
+                    JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
+            }
         });
 
     rtc.addListener(RTCEvents.CREATE_OFFER_FAILED,
         (e, tpc) => {
             conference.statistics.sendCreateOfferFailed(e, tpc);
+            if (!tpc.isP2P) {
+                conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
+                    JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
+            }
         });
 
     rtc.addListener(RTCEvents.SET_LOCAL_DESCRIPTION_FAILED,
         (e, tpc) => {
             conference.statistics.sendSetLocalDescFailed(e, tpc);
+            if (!tpc.isP2P) {
+                conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
+                    JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
+            }
         });
 
     rtc.addListener(RTCEvents.SET_REMOTE_DESCRIPTION_FAILED,
         (e, tpc) => {
             conference.statistics.sendSetRemoteDescFailed(e, tpc);
+            if (!tpc.isP2P) {
+                conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
+                    JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
+            }
         });
 
     rtc.addListener(RTCEvents.LOCAL_TRACK_SSRC_UPDATED,
