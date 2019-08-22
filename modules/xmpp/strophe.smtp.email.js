@@ -60,8 +60,9 @@ class SmtpEmailConnectionPlugin extends ConnectionPlugin {
             const node = req.c('email', rest);
 
             if (body) {
-                body.forEach( item => {
+                body.forEach(item => {
                     const { text, ...attrs } = item;
+
                     req.c('part', attrs, text).up();
                 });
             }

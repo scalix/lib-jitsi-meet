@@ -28,6 +28,7 @@ import Jvb121EventGenerator from './modules/event/Jvb121EventGenerator';
 import RecordingManager from './modules/recording/RecordingManager';
 import RttMonitor from './modules/rttmonitor/rttmonitor';
 import AvgRTPStatsReporter from './modules/statistics/AvgRTPStatsReporter';
+import AudioOutputProblemDetector from './modules/statistics/AudioOutputProblemDetector';
 import SpeakerStatsCollector from './modules/statistics/SpeakerStatsCollector';
 import Statistics from './modules/statistics/statistics';
 import Transcriber from './modules/transcription/transcriber';
@@ -162,6 +163,12 @@ export default function JitsiConference(options) {
      */
     this.avgRtpStatsReporter
         = new AvgRTPStatsReporter(this, options.config.avgRtpStatsN || 15);
+
+    /**
+     * Detects issues with the audio of remote participants.
+     * @type {AudioOutputProblemDetector}
+     */
+    this._audioOutputProblemDetector = new AudioOutputProblemDetector(this);
 
     /**
      * Indicates whether the connection is interrupted or not.
@@ -345,10 +352,12 @@ JitsiConference.prototype._init = function(options = {}) {
 
         this.statistics = new Statistics(this.xmpp, {
             callStatsAliasName,
+            callStatsConfIDNamespace: this.connection.options.hosts.domain,
             confID: config.confID || `${this.connection.options.hosts.domain}/${this.options.name}`,
             customScriptUrl: config.callStatsCustomScriptUrl,
             callStatsID: config.callStatsID,
             callStatsSecret: config.callStatsSecret,
+            roomName: this.options.name,
             swapUserNameAndAlias: config.enableStatsID,
             applicationName: config.applicationName,
             getWiFiStatsMethod: config.getWiFiStatsMethod
@@ -453,6 +462,11 @@ JitsiConference.prototype.leave = function() {
     if (this.avgRtpStatsReporter) {
         this.avgRtpStatsReporter.dispose();
         this.avgRtpStatsReporter = null;
+    }
+
+    if (this._audioOutputProblemDetector) {
+        this._audioOutputProblemDetector.dispose();
+        this._audioOutputProblemDetector = null;
     }
 
     if (this.rttMonitor) {
